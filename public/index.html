@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Socket.IO chat</title>
+    <style>
+      body {
+        margin: 0;
+        padding-bottom: 3rem;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        display: flex;
+        align-items: flex-end;
+        height: 100vh;
+      }
+
+      #openChat {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+      }
+
+      #registrationSection,
+      #chatWindow {
+        display: none;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 1rem;
+        box-sizing: border-box;
+      }
+
+      #registrationForm,
+      #form {
+        background: rgba(0, 0, 0, 0.15);
+        padding: 0.25rem;
+        display: flex;
+        flex-direction: column;
+        height: fit-content;
+        box-sizing: border-box;
+        backdrop-filter: blur(10px);
+      }
+
+      #input,
+      #registrationInput,
+      #emailInput,
+      #phoneInput {
+        border: none;
+        padding: 0 1rem;
+        height: 42px;
+        flex-grow: 1;
+        border-radius: 2rem;
+        margin: 0.25rem;
+      }
+
+      #input:focus,
+      #registrationInput:focus,
+      #emailInput:focus,
+      #phoneInput:focus {
+        outline: none;
+      }
+
+      #form > button,
+      #nextButton {
+        background: #333;
+        border: none;
+        padding: 0 1rem;
+        height: 42px;
+        margin: 0.25rem;
+        border-radius: 3px;
+        outline: none;
+        color: #fff;
+      }
+
+      #form > button,
+      #nextButton:hover {
+        cursor: pointer;
+      }
+
+      #messages {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      #messages > li {
+        padding: 0.5rem 1rem;
+        color: #fff;
+      }
+
+      #messages > li:nth-child(odd) {
+        background: #f5d8d8;
+        color: #333;
+      }
+
+      #closeChat,
+      #finishRegistration {
+        background: #333;
+        border: none;
+        padding: 0.5rem 1rem;
+        margin-top: 1rem;
+        border-radius: 3px;
+        outline: none;
+        color: #fff;
+      }
+
+      #closeChat:hover,
+      #finishRegistration:hover {
+        cursor: pointer;
+      }
+    </style>
+  </head>
+
+  <body>
+    <button id="openChat">Open Chat</button>
+    <div id="registrationSection">
+      <div id="registrationForm">
+        <input id="registrationInput" placeholder="Name" autocomplete="off" />
+        <input id="emailInput" placeholder="Email" autocomplete="off" />
+        <input id="phoneInput" placeholder="Phone Number" autocomplete="off" />
+        <button id="nextButton">Next</button>
+      </div>
+    </div>
+    <div id="chatWindow">
+      <p id="username"></p>
+      <ul id="messages"></ul>
+      <form id="form" action="">
+        <input id="input" autocomplete="off" /><button>Send</button>
+      </form>
+      <button id="closeChat">Close</button>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      function initChat() {
+        const socket = io();
+        const messages = document.getElementById("messages");
+        const form = document.getElementById("form");
+        const input = document.getElementById("input");
+
+        form.addEventListener("submit", (e) => {
+          const userId = sessionStorage.getItem("userId");
+          e.preventDefault();
+          if (input.value) {
+            socket.emit("chat message", {
+              sender: userId,
+              message: input.value,
+            });
+            input.value = "";
+          }
+        });
+
+        socket.on("chat message", (msg) => {
+          console.log(msg);
+          const item = document.createElement("li");
+          const senderSpan = document.createElement("span");
+          senderSpan.textContent = msg.sender;
+          senderSpan.style.fontSize = "smaller";
+          const messageSpan = document.createElement("span");
+          messageSpan.textContent = msg.message;
+          messageSpan.style.fontSize = "larger";
+          item.appendChild(senderSpan);
+          item.appendChild(document.createTextNode(": "));
+          item.appendChild(messageSpan);
+          messages.appendChild(item);
+          window.scrollTo(0, document.body.scrollHeight);
+        });
+      }
+
+      const openChatButton = document.getElementById("openChat");
+      const registrationSection = document.getElementById(
+        "registrationSection"
+      );
+      const registrationForm = document.getElementById("registrationForm");
+      const nextButton = document.getElementById("nextButton");
+      const chatWindow = document.getElementById("chatWindow");
+      const closeChatButton = document.getElementById("closeChat");
+
+      openChatButton.addEventListener("click", () => {
+        openChatButton.style.display = "none";
+        registrationSection.style.display = "flex";
+        registrationSection.style.justifyContent = "center";
+      });
+
+      nextButton.addEventListener("click", async () => {
+        const nameInput = document.getElementById("registrationInput").value;
+        const emailInput = document.getElementById("emailInput").value;
+        const phoneInput = document.getElementById("phoneInput").value;
+
+        try {
+          //API call to handle user registration
+          const response = await fetch("/api/user", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: nameInput,
+              email: emailInput,
+              phone: phoneInput,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Registration failed");
+          }
+
+          const userData = await response.json();
+
+          registrationSection.style.display = "none";
+          chatWindow.style.display = "block";
+
+          const { _id, name } = userData;
+          console.log(_id, name);
+          sessionStorage.setItem("userId", _id);
+
+          const usernameDisplay = document.getElementById("username");
+          usernameDisplay.textContent = `Welcome, ${name}!`;
+
+          initChat(_id, name);
+        } catch (error) {
+          console.error("API Error:", error);
+          alert("An error occurred. Please try again.");
+        }
+      });
+
+      closeChatButton.addEventListener("click", () => {
+        chatWindow.style.display = "none";
+        openChatButton.style.display = "block";
+        sessionStorage.removeItem("userId");
+      });
+
+      socket.on("error", (errorDetails) => {
+        console.error("Server Error:", errorDetails.message);
+        alert("An error occurred. Please try again.");
+      });
+    </script>
+  </body>
+</html>
